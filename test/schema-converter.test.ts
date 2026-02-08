@@ -250,4 +250,329 @@ describe('schema-converter', () => {
     expect(jsonSchema.type).toBe('object')
     expect((jsonSchema as any).properties).toBeDefined()
   })
+
+  it('handles const values', () => {
+    const op = {
+      operationId: 'test', method: 'GET', path: '/test',
+      parameters: [
+        { name: 'type', in: 'query' as const, required: true, schema: { const: 'fixed' } as any },
+      ],
+      responses: {}, security: [], tags: [],
+    }
+    const shape = buildToolInputSchema(op)
+    const schema = z.object(shape)
+    expect(schema.safeParse({ type: 'fixed' }).success).toBe(true)
+    expect(schema.safeParse({ type: 'other' }).success).toBe(false)
+  })
+
+  it('handles allOf with single and multiple schemas', () => {
+    const op = {
+      operationId: 'test', method: 'POST', path: '/test',
+      parameters: [],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              allOf: [
+                { type: 'object', properties: { a: { type: 'string' } }, required: ['a'] },
+                { type: 'object', properties: { b: { type: 'number' } }, required: ['b'] },
+              ],
+            } as any,
+          },
+        },
+      },
+      responses: {}, security: [], tags: [],
+    }
+    const shape = buildToolInputSchema(op)
+    expect(shape['body']).toBeDefined()
+    const schema = z.object(shape)
+    expect(schema.safeParse({ body: { a: 'hello', b: 42 } }).success).toBe(true)
+  })
+
+  it('handles oneOf', () => {
+    const op = {
+      operationId: 'test', method: 'GET', path: '/test',
+      parameters: [
+        {
+          name: 'val', in: 'query' as const, required: true,
+          schema: { oneOf: [{ type: 'string' }, { type: 'number' }] } as any,
+        },
+      ],
+      responses: {}, security: [], tags: [],
+    }
+    const shape = buildToolInputSchema(op)
+    const schema = z.object(shape)
+    expect(schema.safeParse({ val: 'text' }).success).toBe(true)
+    expect(schema.safeParse({ val: 42 }).success).toBe(true)
+  })
+
+  it('handles anyOf', () => {
+    const op = {
+      operationId: 'test', method: 'GET', path: '/test',
+      parameters: [
+        {
+          name: 'val', in: 'query' as const, required: true,
+          schema: { anyOf: [{ type: 'string' }, { type: 'boolean' }] } as any,
+        },
+      ],
+      responses: {}, security: [], tags: [],
+    }
+    const shape = buildToolInputSchema(op)
+    const schema = z.object(shape)
+    expect(schema.safeParse({ val: 'text' }).success).toBe(true)
+    expect(schema.safeParse({ val: true }).success).toBe(true)
+  })
+
+  it('handles exclusiveMinimum/Maximum as booleans (OAS 3.0)', () => {
+    const op = {
+      operationId: 'test', method: 'GET', path: '/test',
+      parameters: [
+        {
+          name: 'val', in: 'query' as const, required: true,
+          schema: { type: 'number', minimum: 0, exclusiveMinimum: true, maximum: 100, exclusiveMaximum: true } as any,
+        },
+      ],
+      responses: {}, security: [], tags: [],
+    }
+    const shape = buildToolInputSchema(op)
+    const schema = z.object(shape)
+    expect(schema.safeParse({ val: 0 }).success).toBe(false) // exclusive
+    expect(schema.safeParse({ val: 0.01 }).success).toBe(true)
+    expect(schema.safeParse({ val: 100 }).success).toBe(false) // exclusive
+    expect(schema.safeParse({ val: 99.99 }).success).toBe(true)
+  })
+
+  it('handles exclusiveMinimum/Maximum as numbers (OAS 3.1)', () => {
+    const op = {
+      operationId: 'test', method: 'GET', path: '/test',
+      parameters: [
+        {
+          name: 'val', in: 'query' as const, required: true,
+          schema: { type: 'number', exclusiveMinimum: 5, exclusiveMaximum: 10 } as any,
+        },
+      ],
+      responses: {}, security: [], tags: [],
+    }
+    const shape = buildToolInputSchema(op)
+    const schema = z.object(shape)
+    expect(schema.safeParse({ val: 5 }).success).toBe(false)
+    expect(schema.safeParse({ val: 5.01 }).success).toBe(true)
+    expect(schema.safeParse({ val: 10 }).success).toBe(false)
+    expect(schema.safeParse({ val: 9.99 }).success).toBe(true)
+  })
+
+  it('handles object with additionalProperties', () => {
+    const op = {
+      operationId: 'test', method: 'POST', path: '/test',
+      parameters: [],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: { name: { type: 'string' } },
+              additionalProperties: true,
+            } as any,
+          },
+        },
+      },
+      responses: {}, security: [], tags: [],
+    }
+    const shape = buildToolInputSchema(op)
+    const schema = z.object(shape)
+    expect(schema.safeParse({ body: { name: 'test', extra: 123 } }).success).toBe(true)
+  })
+
+  it('handles single-value enum with string', () => {
+    const op = {
+      operationId: 'test', method: 'GET', path: '/test',
+      parameters: [
+        { name: 'type', in: 'query' as const, required: true, schema: { type: 'string', enum: ['only'] } },
+      ],
+      responses: {}, security: [], tags: [],
+    }
+    const shape = buildToolInputSchema(op)
+    const schema = z.object(shape)
+    expect(schema.safeParse({ type: 'only' }).success).toBe(true)
+    expect(schema.safeParse({ type: 'other' }).success).toBe(false)
+  })
+
+  it('handles mixed-type enums', () => {
+    const op = {
+      operationId: 'test', method: 'GET', path: '/test',
+      parameters: [
+        { name: 'val', in: 'query' as const, required: true, schema: { enum: [1, 'two', true] } as any },
+      ],
+      responses: {}, security: [], tags: [],
+    }
+    const shape = buildToolInputSchema(op)
+    const schema = z.object(shape)
+    expect(schema.safeParse({ val: 1 }).success).toBe(true)
+    expect(schema.safeParse({ val: 'two' }).success).toBe(true)
+    expect(schema.safeParse({ val: true }).success).toBe(true)
+    expect(schema.safeParse({ val: 'other' }).success).toBe(false)
+  })
+
+  it('handles single-value non-string enum', () => {
+    const op = {
+      operationId: 'test', method: 'GET', path: '/test',
+      parameters: [
+        { name: 'val', in: 'query' as const, required: true, schema: { enum: [42] } as any },
+      ],
+      responses: {}, security: [], tags: [],
+    }
+    const shape = buildToolInputSchema(op)
+    const schema = z.object(shape)
+    expect(schema.safeParse({ val: 42 }).success).toBe(true)
+    expect(schema.safeParse({ val: 43 }).success).toBe(false)
+  })
+
+  it('handles boolean type', () => {
+    const op = {
+      operationId: 'test', method: 'GET', path: '/test',
+      parameters: [
+        { name: 'active', in: 'query' as const, required: true, schema: { type: 'boolean' } },
+      ],
+      responses: {}, security: [], tags: [],
+    }
+    const shape = buildToolInputSchema(op)
+    const schema = z.object(shape)
+    expect(schema.safeParse({ active: true }).success).toBe(true)
+    expect(schema.safeParse({ active: 'yes' }).success).toBe(false)
+  })
+
+  it('handles unknown type', () => {
+    const op = {
+      operationId: 'test', method: 'GET', path: '/test',
+      parameters: [
+        { name: 'data', in: 'query' as const, required: true, schema: {} as any },
+      ],
+      responses: {}, security: [], tags: [],
+    }
+    const shape = buildToolInputSchema(op)
+    const schema = z.object(shape)
+    expect(schema.safeParse({ data: 'anything' }).success).toBe(true)
+    expect(schema.safeParse({ data: 42 }).success).toBe(true)
+  })
+
+  it('handles optional request body', () => {
+    const op = {
+      operationId: 'test', method: 'POST', path: '/test',
+      parameters: [],
+      requestBody: {
+        required: false,
+        description: 'Optional body',
+        content: {
+          'application/json': {
+            schema: { type: 'object', properties: { name: { type: 'string' } } } as any,
+          },
+        },
+      },
+      responses: {}, security: [], tags: [],
+    }
+    const shape = buildToolInputSchema(op)
+    const schema = z.object(shape)
+    expect(schema.safeParse({}).success).toBe(true) // body is optional
+    expect(schema.safeParse({ body: { name: 'test' } }).success).toBe(true)
+  })
+
+  it('handles array without items schema', () => {
+    const op = {
+      operationId: 'test', method: 'GET', path: '/test',
+      parameters: [
+        { name: 'ids', in: 'query' as const, required: true, schema: { type: 'array' } as any },
+      ],
+      responses: {}, security: [], tags: [],
+    }
+    const shape = buildToolInputSchema(op)
+    const schema = z.object(shape)
+    expect(schema.safeParse({ ids: [1, 'two', true] }).success).toBe(true)
+  })
+
+  it('param description falls back to type when no description', () => {
+    const op = {
+      operationId: 'test', method: 'GET', path: '/test',
+      parameters: [
+        { name: 'id', in: 'query' as const, required: true, schema: { type: 'integer' } },
+      ],
+      responses: {}, security: [], tags: [],
+    }
+    const shape = buildToolInputSchema(op)
+    expect(shape['id'].description).toBe('integer')
+  })
+
+  it('param description falls back to "any" when no type', () => {
+    const op = {
+      operationId: 'test', method: 'GET', path: '/test',
+      parameters: [
+        { name: 'data', in: 'query' as const, required: true, schema: {} as any },
+      ],
+      responses: {}, security: [], tags: [],
+    }
+    const shape = buildToolInputSchema(op)
+    expect(shape['data'].description).toBe('any')
+  })
+
+  it('truncates long examples', () => {
+    const longValue = 'A'.repeat(200)
+    const op = {
+      operationId: 'test', method: 'GET', path: '/test',
+      parameters: [
+        { name: 'val', in: 'query' as const, required: true, schema: { type: 'string' }, example: longValue },
+      ],
+      responses: {}, security: [], tags: [],
+    }
+    const shape = buildToolInputSchema(op)
+    expect(shape['val'].description).toContain('...')
+  })
+
+  it('handles oneOf with single schema', () => {
+    const op = {
+      operationId: 'test', method: 'GET', path: '/test',
+      parameters: [
+        {
+          name: 'val', in: 'query' as const, required: true,
+          schema: { oneOf: [{ type: 'string' }] } as any,
+        },
+      ],
+      responses: {}, security: [], tags: [],
+    }
+    const shape = buildToolInputSchema(op)
+    const schema = z.object(shape)
+    expect(schema.safeParse({ val: 'text' }).success).toBe(true)
+  })
+
+  it('handles allOf with single schema', () => {
+    const op = {
+      operationId: 'test', method: 'GET', path: '/test',
+      parameters: [
+        {
+          name: 'val', in: 'query' as const, required: true,
+          schema: { allOf: [{ type: 'string' }] } as any,
+        },
+      ],
+      responses: {}, security: [], tags: [],
+    }
+    const shape = buildToolInputSchema(op)
+    const schema = z.object(shape)
+    expect(schema.safeParse({ val: 'text' }).success).toBe(true)
+  })
+
+  it('handles anyOf with single schema', () => {
+    const op = {
+      operationId: 'test', method: 'GET', path: '/test',
+      parameters: [
+        {
+          name: 'val', in: 'query' as const, required: true,
+          schema: { anyOf: [{ type: 'number' }] } as any,
+        },
+      ],
+      responses: {}, security: [], tags: [],
+    }
+    const shape = buildToolInputSchema(op)
+    const schema = z.object(shape)
+    expect(schema.safeParse({ val: 42 }).success).toBe(true)
+  })
 })
