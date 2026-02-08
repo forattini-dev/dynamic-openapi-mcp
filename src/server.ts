@@ -33,7 +33,7 @@ export async function createOpenApiMcp(options: OpenApiMcpOptions): Promise<Open
   const doc = await loadSpec(options.source)
   const spec = await resolveSpec(doc)
 
-  const serverName = options.name ?? spec.title ?? 'openapi-mcp'
+  const serverName = options.name ?? spec.title ?? 'dynamic-openapi-mcp'
   const serverVersion = options.version ?? spec.version ?? '1.0.0'
 
   const server = new McpServer({

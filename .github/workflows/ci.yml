@@ -128,7 +128,7 @@ jobs:
         run: |
           node -e "
             const pkg = require('./package.json');
-            pkg.name = '@forattini-dev/openapi-mcp';
+            pkg.name = '@forattini-dev/dynamic-openapi-mcp';
             pkg.publishConfig = { registry: 'https://npm.pkg.github.com' };
             require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
           "
@@ -155,8 +155,8 @@ jobs:
           echo "### 📦 Installation" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-          echo "npm install openapi-mcp@next" >> $GITHUB_STEP_SUMMARY
-          echo "pnpm add openapi-mcp@next" >> $GITHUB_STEP_SUMMARY
+          echo "npm install dynamic-openapi-mcp@next" >> $GITHUB_STEP_SUMMARY
+          echo "pnpm add dynamic-openapi-mcp@next" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
 
       - name: Skip Summary
@@ -218,7 +218,7 @@ jobs:
         run: |
           node -e "
             const pkg = require('./package.json');
-            pkg.name = '@forattini-dev/openapi-mcp';
+            pkg.name = '@forattini-dev/dynamic-openapi-mcp';
             pkg.publishConfig = { registry: 'https://npm.pkg.github.com' };
             require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2));
           "
@@ -294,8 +294,8 @@ jobs:
           echo "## 📦 Installation" >> CHANGELOG_BODY.md
           echo "" >> CHANGELOG_BODY.md
           echo "\`\`\`bash" >> CHANGELOG_BODY.md
-          echo "npm install openapi-mcp" >> CHANGELOG_BODY.md
-          echo "pnpm add openapi-mcp" >> CHANGELOG_BODY.md
+          echo "npm install dynamic-openapi-mcp" >> CHANGELOG_BODY.md
+          echo "pnpm add dynamic-openapi-mcp" >> CHANGELOG_BODY.md
           echo "\`\`\`" >> CHANGELOG_BODY.md
 
       - name: Create GitHub Release
@@ -324,11 +324,11 @@ jobs:
           echo "### 📦 Installation" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-          echo "npm install openapi-mcp" >> $GITHUB_STEP_SUMMARY
-          echo "pnpm add openapi-mcp" >> $GITHUB_STEP_SUMMARY
+          echo "npm install dynamic-openapi-mcp" >> $GITHUB_STEP_SUMMARY
+          echo "pnpm add dynamic-openapi-mcp" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 🔗 Links" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- [GitHub Release]($REPO_URL/releases/tag/v$VERSION)" >> $GITHUB_STEP_SUMMARY
-          echo "- [NPM Package](https://www.npmjs.com/package/openapi-mcp)" >> $GITHUB_STEP_SUMMARY
+          echo "- [NPM Package](https://www.npmjs.com/package/dynamic-openapi-mcp)" >> $GITHUB_STEP_SUMMARY

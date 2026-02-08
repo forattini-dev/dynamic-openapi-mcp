@@ -40,10 +40,10 @@ function parseArgs(argv: string[]): CliArgs {
 
 function printHelp(): void {
   console.log(`
-openapi-mcp - Transform OpenAPI specs into MCP servers
+dynamic-openapi-mcp - Transform OpenAPI specs into MCP servers
 
 Usage:
-  openapi-mcp [options] [source]
+  dynamic-openapi-mcp [options] [source]
 
 Options:
   -s, --source <url|file>   OpenAPI spec URL or file path
@@ -59,10 +59,10 @@ Environment Variables:
   OPENAPI_API_KEY           API key for authentication
 
 Examples:
-  openapi-mcp -s https://petstore3.swagger.io/api/v3/openapi.json
-  openapi-mcp ./spec.yaml
-  openapi-mcp --server-index 1 ./spec.yaml
-  OPENAPI_SOURCE=./spec.yaml OPENAPI_AUTH_TOKEN=sk-123 openapi-mcp
+  dynamic-openapi-mcp -s https://petstore3.swagger.io/api/v3/openapi.json
+  dynamic-openapi-mcp ./spec.yaml
+  dynamic-openapi-mcp --server-index 1 ./spec.yaml
+  OPENAPI_SOURCE=./spec.yaml OPENAPI_AUTH_TOKEN=sk-123 dynamic-openapi-mcp
 `)
 }
 
@@ -74,7 +74,7 @@ async function main(): Promise<void> {
   if (!source) {
     console.error('Error: No OpenAPI source specified.')
     console.error('Use -s <url|file> or set OPENAPI_SOURCE environment variable.')
-    console.error('Run openapi-mcp --help for usage information.')
+    console.error('Run dynamic-openapi-mcp --help for usage information.')
     process.exit(1)
   }
 
@@ -98,18 +98,18 @@ async function main(): Promise<void> {
     const opCount = mcp.spec.operations.length
     const schemaCount = Object.keys(mcp.spec.schemas).length
     process.stderr.write(
-      `openapi-mcp: loaded "${mcp.spec.title}" v${mcp.spec.version} — ${opCount} tools, ${schemaCount} schemas\n`
+      `dynamic-openapi-mcp: loaded "${mcp.spec.title}" v${mcp.spec.version} — ${opCount} tools, ${schemaCount} schemas\n`
     )
 
     await mcp.serve()
   } catch (error) {
     if (error instanceof Error) {
-      process.stderr.write(`openapi-mcp: ${error.message}\n`)
+      process.stderr.write(`dynamic-openapi-mcp: ${error.message}\n`)
       if (error.stack) {
         process.stderr.write(`${error.stack}\n`)
       }
     } else {
-      process.stderr.write(`openapi-mcp: ${String(error)}\n`)
+      process.stderr.write(`dynamic-openapi-mcp: ${String(error)}\n`)
     }
     process.exit(1)
   }
