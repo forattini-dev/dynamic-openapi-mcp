@@ -229,6 +229,65 @@ describe('executeOperation', () => {
     }
   })
 
+  it('refreshes authentication once after a 401 response', async () => {
+    mockFetch
+      .mockResolvedValueOnce(new Response('Unauthorized', { status: 401, statusText: 'Unauthorized' }))
+      .mockResolvedValueOnce(createMockResponse('{"ok":true}'))
+
+    const config: HttpClientConfig = {
+      ...baseConfig,
+      auth: {
+        async apply(_url, init) {
+          const headers = new Headers(init.headers)
+          headers.set('Authorization', 'Bearer stale-token')
+          return { ...init, headers }
+        },
+        async refresh(_url, init) {
+          const headers = new Headers(init.headers)
+          headers.set('Authorization', 'Bearer fresh-token')
+          return { ...init, headers }
+        },
+      },
+    }
+
+    const op = makeOp()
+    const result = await executeOperation(op, {}, config)
+
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+    const firstHeaders = new Headers(mockFetch.mock.calls[0][1].headers)
+    const secondHeaders = new Headers(mockFetch.mock.calls[1][1].headers)
+    expect(firstHeaders.get('Authorization')).toBe('Bearer stale-token')
+    expect(secondHeaders.get('Authorization')).toBe('Bearer fresh-token')
+    if (result[0].type === 'text') {
+      expect(result[0].text).toContain('HTTP 200')
+    }
+  })
+
+  it('surfaces refresh failures after a 401 response', async () => {
+    mockFetch.mockResolvedValueOnce(new Response('Unauthorized', { status: 401, statusText: 'Unauthorized' }))
+
+    const config: HttpClientConfig = {
+      ...baseConfig,
+      auth: {
+        async apply(_url, init) {
+          const headers = new Headers(init.headers)
+          headers.set('Authorization', 'Bearer stale-token')
+          return { ...init, headers }
+        },
+        async refresh() {
+          throw new Error('refresh failed')
+        },
+      },
+    }
+
+    const op = makeOp()
+    const result = await executeOperation(op, {}, config)
+
+    if (result[0].type === 'text') {
+      expect(result[0].text).toContain('Authentication refresh failed: refresh failed')
+    }
+  })
+
   it('uses default headers from config', async () => {
     mockFetch.mockResolvedValueOnce(createMockResponse('{}'))
 

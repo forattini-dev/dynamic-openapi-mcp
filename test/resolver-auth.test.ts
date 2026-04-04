@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { resolveAuth } from '../src/auth/resolver.js'
-import { BearerAuth, ApiKeyAuth, BasicAuth, CompositeAuth, CustomAuth } from '../src/auth/strategies.js'
+import { BearerAuth, ApiKeyAuth, BasicAuth, CompositeAuth, CustomAuth, TokenExchangeAuth } from '../src/auth/strategies.js'
 import type { OpenAPIV3 } from 'openapi-types'
 
 const schemes: Record<string, OpenAPIV3.SecuritySchemeObject> = {
@@ -46,6 +46,18 @@ describe('resolveAuth', () => {
   it('returns CompositeAuth when multiple strategies configured', () => {
     const auth = resolveAuth({ bearerToken: 'tok', apiKey: 'key' }, schemes)
     expect(auth).toBeInstanceOf(CompositeAuth)
+  })
+
+  it('returns TokenExchangeAuth from config', () => {
+    const auth = resolveAuth({
+      tokenExchange: {
+        tokenUrl: 'https://auth.test.com/session',
+        request: {
+          fields: { credId: 'abc', credSecret: 'secret' },
+        },
+      },
+    }, schemes)
+    expect(auth).toBeInstanceOf(TokenExchangeAuth)
   })
 
   it('resolves from per-scheme env vars', () => {

@@ -67,6 +67,37 @@ describe('fetchWithRetry', () => {
     expect(mockFetch).toHaveBeenCalledTimes(2)
   })
 
+  it('does not retry mutating requests by default', async () => {
+    mockFetch
+      .mockResolvedValueOnce(new Response('', { status: 503 }))
+      .mockResolvedValueOnce(new Response('ok', { status: 200 }))
+
+    const res = await fetchWithRetry('https://api.test.com', { method: 'POST' }, {
+      retries: 2,
+      retryDelay: 10,
+      retryOn: [503],
+    })
+
+    expect(res.status).toBe(503)
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('retries mutating requests when retryPolicy is all', async () => {
+    mockFetch
+      .mockResolvedValueOnce(new Response('', { status: 503 }))
+      .mockResolvedValueOnce(new Response('ok', { status: 200 }))
+
+    const res = await fetchWithRetry('https://api.test.com', { method: 'POST' }, {
+      retries: 2,
+      retryDelay: 10,
+      retryOn: [503],
+      retryPolicy: 'all',
+    })
+
+    expect(res.status).toBe(200)
+    expect(mockFetch).toHaveBeenCalledTimes(2)
+  })
+
   it('throws after all retries exhausted on errors', async () => {
     mockFetch
       .mockRejectedValueOnce(new Error('fail 1'))
@@ -156,5 +187,21 @@ describe('fetchWithRetry', () => {
         timeout: 5000,
       })
     ).rejects.toThrow('timed out')
+  })
+
+  it('does not retry when retryPolicy is none', async () => {
+    mockFetch
+      .mockRejectedValueOnce(new Error('Network failed'))
+      .mockResolvedValueOnce(new Response('ok', { status: 200 }))
+
+    await expect(
+      fetchWithRetry('https://api.test.com', undefined, {
+        retries: 2,
+        retryDelay: 10,
+        retryPolicy: 'none',
+      })
+    ).rejects.toThrow('Network failed')
+
+    expect(mockFetch).toHaveBeenCalledTimes(1)
   })
 })

@@ -1,8 +1,11 @@
+export type RetryPolicy = 'safe-only' | 'all' | 'none'
+
 export interface FetchWithRetryOptions {
   timeout?: number
   retries?: number
   retryDelay?: number
   retryOn?: number[]
+  retryPolicy?: RetryPolicy
 }
 
 const DEFAULT_OPTIONS: Required<FetchWithRetryOptions> = {
@@ -10,6 +13,7 @@ const DEFAULT_OPTIONS: Required<FetchWithRetryOptions> = {
   retries: 3,
   retryDelay: 1_000,
   retryOn: [429, 500, 502, 503, 504],
+  retryPolicy: 'safe-only',
 }
 
 export async function fetchWithRetry(
@@ -17,7 +21,8 @@ export async function fetchWithRetry(
   init?: RequestInit,
   opts?: FetchWithRetryOptions
 ): Promise<Response> {
-  const { timeout, retries, retryDelay, retryOn } = { ...DEFAULT_OPTIONS, ...opts }
+  const { timeout, retries, retryDelay, retryOn, retryPolicy } = { ...DEFAULT_OPTIONS, ...opts }
+  const canRetry = shouldRetry(init, retryPolicy)
 
   let lastError: Error | undefined
 
@@ -33,7 +38,7 @@ export async function fetchWithRetry(
 
       clearTimeout(timer)
 
-      if (retryOn.includes(response.status) && attempt < retries) {
+      if (retryOn.includes(response.status) && attempt < retries && canRetry) {
         const retryAfter = response.headers.get('Retry-After')
         const delay = retryAfter
           ? parseRetryAfter(retryAfter)
@@ -51,10 +56,12 @@ export async function fetchWithRetry(
         lastError = new Error(`Request timed out after ${timeout}ms: ${url}`)
       }
 
-      if (attempt < retries) {
+      if (attempt < retries && canRetry) {
         await sleep(retryDelay * Math.pow(2, attempt))
         continue
       }
+
+      break
     }
   }
 
@@ -78,3 +85,16 @@ function parseRetryAfter(value: string): number {
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
+
+function shouldRetry(init: RequestInit | undefined, retryPolicy: RetryPolicy): boolean {
+  switch (retryPolicy) {
+    case 'all':
+      return true
+    case 'none':
+      return false
+    case 'safe-only':
+      return SAFE_METHODS.has((init?.method ?? 'GET').toUpperCase())
+  }
+}
+
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS', 'TRACE'])

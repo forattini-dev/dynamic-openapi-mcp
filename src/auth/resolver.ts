@@ -5,6 +5,7 @@ import {
   ApiKeyAuth,
   BasicAuth,
   OAuth2ClientCredentials,
+  TokenExchangeAuth,
   CustomAuth,
   CompositeAuth,
   createAuthFromScheme,
@@ -49,6 +50,10 @@ export function resolveAuth(
         config.oauth2.scopes
       )
     )
+  }
+
+  if (config?.tokenExchange) {
+    strategies.push(new TokenExchangeAuth(config.tokenExchange))
   }
 
   if (strategies.length > 0) {

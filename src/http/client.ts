@@ -122,7 +122,18 @@ export async function executeOperation(
   }
 
   try {
-    const response = await fetchWithRetry(url.toString(), init, config.fetchOptions)
+    let response = await fetchWithRetry(url.toString(), init, config.fetchOptions)
+
+    if (response.status === 401 && config.auth?.refresh) {
+      try {
+        init = await config.auth.refresh(url, init)
+        response = await fetchWithRetry(url.toString(), init, config.fetchOptions)
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error)
+        return [{ type: 'text' as const, text: `Authentication refresh failed: ${msg}` }]
+      }
+    }
+
     const statusPrefix = `HTTP ${response.status} ${response.statusText}\n\n`
     const content = await handleResponse(response)
 

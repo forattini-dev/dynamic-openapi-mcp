@@ -51,12 +51,18 @@ Now ask Claude: *"list all available pets"* — it will call `listPets` and retu
   - [Claude Desktop](#claude-desktop)
   - [Multiple APIs](#multiple-apis)
 - [Authentication](#authentication)
+  - [Choosing an Auth Strategy](#choosing-an-auth-strategy)
   - [Environment Variables](#via-environment-variables)
   - [Supported Schemes](#supported-schemes)
+  - [Programmatic Examples](#programmatic-examples)
+  - [Temporary Tokens and Refresh](#temporary-tokens-and-refresh)
+  - [How Auth Is Usually Modeled in OpenAPI](#how-auth-is-usually-modeled-in-openapi)
+  - [Troubleshooting Auth](#troubleshooting-auth)
 - [Programmatic Usage](#programmatic-usage)
   - [Custom Base URL](#custom-base-url)
   - [Inline Spec](#from-an-inline-spec)
   - [Inspecting the Spec](#inspecting-the-parsed-spec)
+  - [Retry Behavior](#retry-behavior)
 - [CLI Reference](#cli-reference)
 - [How the Mapping Works](#how-the-mapping-works)
   - [Operations → Tools](#operations--tools)
@@ -73,7 +79,7 @@ Now ask Claude: *"list all available pets"* — it will call `listPets` and retu
 | **Tools** | One per operation — `GET /pets` becomes `listPets`, with fully typed inputs |
 | **Resources** | Full spec as `openapi://spec` + each schema as `openapi://schemas/{name}` |
 | **Prompts** | `describe-api` for an overview, `explore-endpoint` for details on any operation |
-| **Auth** | Bearer, API Key (header/query/cookie), Basic, OAuth2 client credentials |
+| **Auth** | Bearer, API Key (header/query/cookie), Basic, OAuth2 client credentials, token exchange |
 | **Sources** | URL, local file (JSON/YAML), inline string, or JavaScript object |
 
 The flow is simple: AI calls a tool → `dynamic-openapi-mcp` makes the real HTTP request → response comes back as MCP content.
@@ -186,6 +192,17 @@ Connect several APIs at once — each runs as a separate MCP server, and the AI 
 
 ## Authentication
 
+### Choosing an Auth Strategy
+
+| If your API uses... | Use this | Auto-refresh | Best for |
+|:--------------------|:---------|:-------------|:---------|
+| Static bearer token | `OPENAPI_AUTH_TOKEN` or `auth.bearerToken` | No | Personal access tokens, fixed service tokens |
+| Static API key | `OPENAPI_API_KEY` or `auth.apiKey` | No | Header/query/cookie API keys declared in the spec |
+| Basic auth | `auth.basicAuth` | No | Legacy username/password APIs |
+| OAuth2 client credentials | `auth.oauth2` | Yes | Machine-to-machine OAuth flows with `tokenUrl` |
+| Temporary token exchange | `auth.tokenExchange` | Yes | Non-standard `credId` / `credSecret` login flows |
+| Fully custom auth logic | `auth.custom` | You implement it | Edge cases not covered by built-in strategies |
+
 ### Via environment variables
 
 ```bash
@@ -205,13 +222,264 @@ Or set them in the MCP config `env` block — same effect, cleaner setup.
 
 | Scheme | Env var | Programmatic config |
 |:-------|:--------|:--------------------|
-| Bearer | `OPENAPI_AUTH_TOKEN` | `auth.bearerToken` |
-| API Key (header/query/cookie) | `OPENAPI_API_KEY` | `auth.apiKey` |
-| Basic | `OPENAPI_AUTH_TOKEN` (as `user:pass`) | `auth.basicAuth` |
+| Bearer | `OPENAPI_AUTH_TOKEN` or `OPENAPI_AUTH_<SCHEME>_TOKEN` | `auth.bearerToken` |
+| API Key (header/query/cookie) | `OPENAPI_API_KEY` or `OPENAPI_AUTH_<SCHEME>_KEY` | `auth.apiKey` |
+| Basic | `OPENAPI_AUTH_<SCHEME>_TOKEN` as `user:pass` | `auth.basicAuth` |
 | OAuth2 (client credentials) | — | `auth.oauth2` |
+| Token exchange | — | `auth.tokenExchange` |
 | Custom | — | `auth.custom` (function) |
 
 Resolution order: programmatic config → per-scheme env var → global env var.
+
+Per-scheme environment variables are derived from the `securitySchemes` name in your OpenAPI document:
+
+```yaml
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+```
+
+This scheme name maps to:
+
+```bash
+OPENAPI_AUTH_BEARERAUTH_TOKEN=sk-123
+```
+
+For a basic auth scheme named `basicAuth`, use:
+
+```bash
+OPENAPI_AUTH_BASICAUTH_TOKEN=username:password
+```
+
+### Programmatic Examples
+
+Bearer token:
+
+```typescript
+const mcp = await createOpenApiMcp({
+  source: './spec.yaml',
+  auth: { bearerToken: process.env.MY_API_TOKEN! },
+})
+```
+
+API key:
+
+```typescript
+const mcp = await createOpenApiMcp({
+  source: './spec.yaml',
+  auth: { apiKey: process.env.MY_API_KEY! },
+})
+```
+
+Basic auth:
+
+```typescript
+const mcp = await createOpenApiMcp({
+  source: './spec.yaml',
+  auth: {
+    basicAuth: {
+      username: process.env.API_USER!,
+      password: process.env.API_PASSWORD!,
+    },
+  },
+})
+```
+
+OAuth2 client credentials with automatic token caching and refresh:
+
+```typescript
+const mcp = await createOpenApiMcp({
+  source: './spec.yaml',
+  auth: {
+    oauth2: {
+      clientId: process.env.OAUTH_CLIENT_ID!,
+      clientSecret: process.env.OAUTH_CLIENT_SECRET!,
+      tokenUrl: 'https://auth.example.com/oauth/token',
+      scopes: ['pets:read', 'pets:write'],
+    },
+  },
+})
+```
+
+`dynamic-openapi-mcp` caches the retrieved access token in memory and refreshes it when it is close to expiration.
+
+### Temporary Tokens and Refresh
+
+Many APIs are not true OAuth2, but still issue a short-lived bearer token after exchanging credentials such as `credId` and `credSecret`.
+
+For these APIs, use `auth.tokenExchange`. The built-in strategy:
+
+1. Exchanges credentials for a temporary token.
+2. Caches the token in memory.
+3. Refreshes slightly before `expires_in` or `expires_at`.
+4. Retries once on `401 Unauthorized` after forcing a fresh token.
+5. Reuses a single in-flight refresh promise so concurrent MCP calls do not stampede the auth server.
+
+Example:
+
+```typescript
+import { createOpenApiMcp } from 'dynamic-openapi-mcp'
+
+const mcp = await createOpenApiMcp({
+  source: './spec.yaml',
+  auth: {
+    tokenExchange: {
+      tokenUrl: 'https://auth.example.com/session',
+      request: {
+        contentType: 'application/json',
+        fields: {
+          credId: process.env.CRED_ID!,
+          credSecret: process.env.CRED_SECRET!,
+        },
+      },
+      response: {
+        tokenField: 'access_token',
+        expiresInField: 'expires_in',
+      },
+      apply: {
+        location: 'header',
+        name: 'Authorization',
+        prefix: 'Bearer ',
+      },
+    },
+  },
+})
+```
+
+Notes:
+
+- `auth.tokenExchange` also supports form-encoded requests via `request.contentType: 'application/x-www-form-urlencoded'`.
+- If the token response is nested, use dot-paths such as `response.tokenField: 'data.accessToken'`.
+- If there is no expiry metadata, the token stays cached until the API returns `401`, then a new exchange is attempted once.
+- `apply.location` can be `header`, `query`, or `cookie`.
+- The token cache is in-memory. If the MCP process restarts, it will fetch a new token on the next request.
+- If your auth flow cannot be described declaratively, fall back to `auth.custom`.
+
+Advanced fallback with `auth.custom`:
+
+```typescript
+const mcp = await createOpenApiMcp({
+  source: './spec.yaml',
+  auth: {
+    custom: async (_url, init) => {
+      const headers = new Headers(init.headers)
+      headers.set('Authorization', `Bearer ${await getMyTokenSomehow()}`)
+      return { ...init, headers }
+    },
+  },
+})
+```
+
+### How Auth Is Usually Modeled in OpenAPI
+
+For protected endpoints, OpenAPI usually describes the final auth mechanism used when calling the API, not the full lifecycle of how a client should fetch and refresh credentials.
+
+Standard bearer auth:
+
+```yaml
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+security:
+  - bearerAuth: []
+```
+
+API key auth:
+
+```yaml
+components:
+  securitySchemes:
+    apiKeyAuth:
+      type: apiKey
+      name: X-API-Key
+      in: header
+security:
+  - apiKeyAuth: []
+```
+
+OAuth2 client credentials:
+
+```yaml
+components:
+  securitySchemes:
+    oauth:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: https://auth.example.com/oauth/token
+          scopes:
+            pets:read: Read pets
+security:
+  - oauth: [pets:read]
+```
+
+Custom temporary token flows are usually documented in two separate places:
+
+1. The protected endpoints declare `bearerAuth` or `apiKeyAuth` in `securitySchemes`.
+2. A normal operation in `paths` documents the login or token-exchange endpoint.
+
+Example:
+
+```yaml
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+
+paths:
+  /auth/token:
+    post:
+      summary: Exchange credId and credSecret for a temporary token
+      requestBody:
+        required: true
+      responses:
+        '200':
+          description: Token issued
+```
+
+This pattern is common, but it does not fully tell a generic client:
+
+- which credentials should come from environment variables
+- which response field contains the token
+- how long the token is valid
+- when to refresh it
+- whether a `401` should trigger a new exchange
+
+That is why true OAuth2 is easiest to automate from OpenAPI alone, while custom temporary-token systems usually need either explicit `auth.tokenExchange` config or a small amount of user-supplied code.
+
+If you want to document these custom flows more explicitly for users of this library, a future vendor extension could look like this:
+
+```yaml
+x-dynamic-openapi-mcp-auth:
+  type: tokenExchange
+  tokenUrl: https://auth.example.com/session
+  request:
+    contentType: application/json
+    fields:
+      credId:
+        env: CRED_ID
+      credSecret:
+        env: CRED_SECRET
+  response:
+    tokenField: access_token
+    expiresInField: expires_in
+    tokenType: Bearer
+```
+
+This is not used by `dynamic-openapi-mcp` today, but it shows the kind of metadata that would make temporary-token flows much easier to automate.
+
+### Troubleshooting Auth
+
+- If requests return `401 Unauthorized`, first confirm the OpenAPI spec's `securitySchemes` matches how the real API expects auth.
+- If you use environment variables, prefer per-scheme variables when the spec defines multiple auth schemes.
+- If your token expires every few minutes, use programmatic auth instead of a static env var.
+- If your provider gives you a login endpoint that is not OAuth2, start with `auth.tokenExchange`. Use `auth.custom` only when the exchange is too irregular to describe declaratively.
+- If the provider requires the temporary token in a query string or cookie, `auth.tokenExchange` supports `apply.location: 'query'` and `apply.location: 'cookie'`.
 
 ## Programmatic Usage
 
@@ -271,6 +539,31 @@ console.log(mcp.spec.title)       // "My API"
 console.log(mcp.spec.operations)  // ParsedOperation[]
 console.log(mcp.spec.schemas)     // { Pet: {...}, User: {...} }
 ```
+
+### Retry Behavior
+
+By default, `dynamic-openapi-mcp` retries only safe methods: `GET`, `HEAD`, `OPTIONS`, and `TRACE`.
+
+This keeps reads resilient without risking duplicate writes on `POST`, `PUT`, `PATCH`, or `DELETE`.
+
+If you want different behavior, set `fetchOptions.retryPolicy`:
+
+```typescript
+const mcp = await createOpenApiMcp({
+  source: './spec.yaml',
+  fetchOptions: {
+    retries: 2,
+    retryPolicy: 'all', // 'safe-only' (default) | 'all' | 'none'
+  },
+})
+```
+
+Notes:
+
+- `retryPolicy: 'safe-only'` is the default.
+- `retryPolicy: 'all'` retries mutating requests too.
+- `retryPolicy: 'none'` disables request retries entirely.
+- Built-in auth token fetches use their own internal retry behavior and are not blocked by the default safe-only policy.
 
 ## CLI Reference
 
