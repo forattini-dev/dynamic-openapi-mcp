@@ -135,6 +135,108 @@ describe('executeOperation', () => {
     expect(headers.get('Content-Type')).toBe('application/json')
   })
 
+  it('serializes application/x-www-form-urlencoded bodies', async () => {
+    mockFetch.mockResolvedValueOnce(createMockResponse('{}', { status: 201 }))
+
+    const op = makeOp({
+      method: 'POST',
+      requestBody: {
+        required: true,
+        content: {
+          'application/x-www-form-urlencoded': {
+            schema: { type: 'object', properties: { name: { type: 'string' } } },
+          },
+        },
+      },
+    })
+
+    await executeOperation(op, {
+      body: { name: 'Rex', tags: ['a', 'b'], meta: { active: true } },
+    }, baseConfig)
+
+    const [, init] = mockFetch.mock.calls[0]
+    expect(init.method).toBe('POST')
+    expect(init.body).toBeInstanceOf(URLSearchParams)
+    const body = init.body as URLSearchParams
+    expect(body.get('name')).toBe('Rex')
+    expect(body.getAll('tags')).toEqual(['a', 'b'])
+    expect(body.get('meta')).toBe('{"active":true}')
+    const headers = new Headers(init.headers)
+    expect(headers.get('Content-Type')).toBe('application/x-www-form-urlencoded')
+  })
+
+  it('serializes multipart/form-data bodies and binary file wrappers', async () => {
+    mockFetch.mockResolvedValueOnce(createMockResponse('{}', { status: 201 }))
+
+    const op = makeOp({
+      method: 'POST',
+      requestBody: {
+        required: true,
+        content: {
+          'multipart/form-data': {
+            schema: {
+              type: 'object',
+              properties: {
+                title: { type: 'string' },
+                file: { type: 'string', format: 'binary' },
+              },
+              required: ['file'],
+            },
+          },
+        },
+      },
+    })
+
+    await executeOperation(op, {
+      body: {
+        title: 'avatar',
+        file: {
+          dataBase64: Buffer.from('file-bytes').toString('base64'),
+          filename: 'avatar.bin',
+          contentType: 'application/octet-stream',
+        },
+      },
+    }, baseConfig)
+
+    const [, init] = mockFetch.mock.calls[0]
+    expect(init.body).toBeInstanceOf(FormData)
+    const body = init.body as FormData
+    expect(body.get('title')).toBe('avatar')
+    const file = body.get('file')
+    expect(file).toBeInstanceOf(Blob)
+    expect(await (file as Blob).text()).toBe('file-bytes')
+    const headers = new Headers(init.headers)
+    expect(headers.get('Content-Type')).toBeNull()
+  })
+
+  it('serializes octet-stream bodies from base64 wrappers', async () => {
+    mockFetch.mockResolvedValueOnce(createMockResponse('{}', { status: 201 }))
+
+    const op = makeOp({
+      method: 'PUT',
+      requestBody: {
+        required: true,
+        content: {
+          'application/octet-stream': {
+            schema: { type: 'string', format: 'binary' },
+          },
+        },
+      },
+    })
+
+    await executeOperation(op, {
+      body: {
+        dataBase64: Buffer.from('raw-bytes').toString('base64'),
+      },
+    }, baseConfig)
+
+    const [, init] = mockFetch.mock.calls[0]
+    expect(init.body).toBeInstanceOf(Uint8Array)
+    expect(Buffer.from(init.body as Uint8Array).toString()).toBe('raw-bytes')
+    const headers = new Headers(init.headers)
+    expect(headers.get('Content-Type')).toBe('application/octet-stream')
+  })
+
   it('returns validation errors for missing required params', async () => {
     const op = makeOp({
       parameters: [
@@ -320,6 +422,25 @@ describe('executeOperation', () => {
     const result = await executeOperation(op, { body: circular }, baseConfig)
     if (result[0].type === 'text') {
       expect(result[0].text).toContain('could not be serialized')
+    }
+  })
+
+  it('returns a helpful error for invalid multipart bodies', async () => {
+    const op = makeOp({
+      method: 'POST',
+      requestBody: {
+        required: true,
+        content: {
+          'multipart/form-data': {
+            schema: { type: 'object' },
+          },
+        },
+      },
+    })
+
+    const result = await executeOperation(op, { body: 'not-an-object' }, baseConfig)
+    if (result[0].type === 'text') {
+      expect(result[0].text).toContain('multipart/form-data body must be an object or FormData')
     }
   })
 })

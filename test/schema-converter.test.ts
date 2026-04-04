@@ -48,6 +48,68 @@ describe('schema-converter', () => {
     expect(schema.safeParse({ body: { name: 'Rex' } }).success).toBe(true)
   })
 
+  it('accepts binary wrapper objects for octet-stream bodies', () => {
+    const op = {
+      operationId: 'uploadBinary',
+      method: 'PUT',
+      path: '/upload',
+      parameters: [],
+      requestBody: {
+        required: true,
+        content: {
+          'application/octet-stream': {
+            schema: { type: 'string', format: 'binary' },
+          },
+        },
+      },
+      responses: {},
+      security: [],
+      tags: [],
+    }
+
+    const shape = buildToolInputSchema(op)
+    const schema = z.object(shape)
+    expect(schema.safeParse({
+      body: { dataBase64: Buffer.from('hello').toString('base64') },
+    }).success).toBe(true)
+  })
+
+  it('accepts multipart bodies with binary file properties', () => {
+    const op = {
+      operationId: 'uploadMultipart',
+      method: 'POST',
+      path: '/upload',
+      parameters: [],
+      requestBody: {
+        required: true,
+        content: {
+          'multipart/form-data': {
+            schema: {
+              type: 'object',
+              properties: {
+                title: { type: 'string' },
+                file: { type: 'string', format: 'binary' },
+              },
+              required: ['file'],
+            },
+          },
+        },
+      },
+      responses: {},
+      security: [],
+      tags: [],
+    }
+
+    const shape = buildToolInputSchema(op)
+    const schema = z.object(shape)
+    expect(schema.safeParse({
+      body: {
+        title: 'avatar',
+        file: { dataBase64: Buffer.from('abc').toString('base64'), filename: 'a.bin' },
+      },
+    }).success).toBe(true)
+  })
+
   it('builds Zod shape for GET with path params', async () => {
     const doc = await loadSpec(FIXTURE)
     const spec = await resolveSpec(doc)

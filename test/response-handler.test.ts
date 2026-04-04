@@ -63,6 +63,37 @@ describe('handleResponse', () => {
     }
   })
 
+  it('returns generic binary responses as base64 text', async () => {
+    const buffer = new Uint8Array([0x25, 0x50, 0x44, 0x46]).buffer
+    const res = new Response(buffer, {
+      status: 200,
+      headers: { 'content-type': 'application/pdf' },
+    })
+
+    const blocks = await handleResponse(res)
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0].type).toBe('text')
+    if (blocks[0].type === 'text') {
+      expect(blocks[0].text).toContain('Binary response: application/pdf')
+      expect(blocks[0].text).toContain('Base64:')
+      expect(blocks[0].text).toContain(Buffer.from(buffer).toString('base64'))
+    }
+  })
+
+  it('omits oversized binary payloads from inline output', async () => {
+    const buffer = new Uint8Array(70 * 1024).buffer
+    const res = new Response(buffer, {
+      status: 200,
+      headers: { 'content-type': 'application/octet-stream' },
+    })
+
+    const blocks = await handleResponse(res)
+    expect(blocks).toHaveLength(1)
+    if (blocks[0].type === 'text') {
+      expect(blocks[0].text).toContain('Binary payload omitted')
+    }
+  })
+
   it('returns empty response message when body is empty', async () => {
     const res = createResponse('', {
       status: 200,

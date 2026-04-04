@@ -80,6 +80,7 @@ Now ask Claude: *"list all available pets"* — it will call `listPets` and retu
 | **Resources** | Full spec as `openapi://spec` + each schema as `openapi://schemas/{name}` |
 | **Prompts** | `describe-api` for an overview, `explore-endpoint` for details on any operation |
 | **Auth** | Bearer, API Key (header/query/cookie), Basic, OAuth2 client credentials, token exchange |
+| **Bodies** | JSON, form-urlencoded, multipart/form-data, and octet-stream request bodies |
 | **Sources** | URL, local file (JSON/YAML), inline string, or JavaScript object |
 
 The flow is simple: AI calls a tool → `dynamic-openapi-mcp` makes the real HTTP request → response comes back as MCP content.
@@ -596,6 +597,19 @@ Each operation in the spec becomes one MCP tool:
 | `summary` or `description` | Tool description (truncated to 200 chars) |
 | Path + query + header params | Top-level input properties |
 | Request body | Input property under `body` key |
+
+Request bodies preserve the original media type when possible:
+
+- `application/json` is sent as JSON.
+- `application/x-www-form-urlencoded` is serialized as `URLSearchParams`.
+- `multipart/form-data` is serialized as `FormData`.
+- `application/octet-stream` and other binary bodies support `{ dataBase64, filename?, contentType? }`.
+
+Response handling follows the same idea:
+
+- JSON is pretty-printed.
+- Images are returned as MCP image content.
+- Other binary payloads are returned as binary metadata plus base64 when small enough to inline.
 
 ### Schemas → Resources
 

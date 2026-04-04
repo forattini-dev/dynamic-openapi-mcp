@@ -2,6 +2,12 @@ import { z } from 'zod'
 import type { OpenAPIV3 } from 'openapi-types'
 import type { ParsedOperation, ParsedParameter } from '../parser/types.js'
 
+const binaryUploadSchema = z.object({
+  dataBase64: z.string().describe('Base64-encoded file content'),
+  filename: z.string().optional().describe('Optional filename for multipart uploads'),
+  contentType: z.string().optional().describe('Optional MIME type for the uploaded content'),
+})
+
 export function buildToolInputSchema(operation: ParsedOperation): Record<string, z.ZodTypeAny> {
   const shape: Record<string, z.ZodTypeAny> = {}
 
@@ -16,16 +22,21 @@ export function buildToolInputSchema(operation: ParsedOperation): Record<string,
   }
 
   if (operation.requestBody) {
-    const jsonContent =
-      operation.requestBody.content['application/json'] ??
-      operation.requestBody.content[Object.keys(operation.requestBody.content)[0]]
+    const [contentType, bodyContent] = pickRequestBodyContent(operation.requestBody.content)
 
-    if (jsonContent?.schema) {
-      let bodySchema = convertToZod(jsonContent.schema)
+    if (contentType && bodyContent?.schema) {
+      let bodySchema = convertToZod(bodyContent.schema)
       const bodyParts: string[] = []
       if (operation.requestBody.description) bodyParts.push(operation.requestBody.description)
-      if (jsonContent.example !== undefined) {
-        bodyParts.push(`Example: ${truncateExample(jsonContent.example)}`)
+      bodyParts.push(`Content-Type: ${contentType}`)
+      if (bodyContent.example !== undefined) {
+        bodyParts.push(`Example: ${truncateExample(bodyContent.example)}`)
+      }
+      if (contentType === 'multipart/form-data') {
+        bodyParts.push('Binary fields can use { dataBase64, filename?, contentType? }')
+      }
+      if (contentType === 'application/octet-stream') {
+        bodyParts.push('Pass raw text/bytes or { dataBase64, filename?, contentType? } for binary content')
       }
       if (bodyParts.length > 0) {
         bodySchema = bodySchema.describe(bodyParts.join(' | '))
@@ -38,6 +49,28 @@ export function buildToolInputSchema(operation: ParsedOperation): Record<string,
   }
 
   return shape
+}
+
+function pickRequestBodyContent(
+  content: Record<string, { schema: OpenAPIV3.SchemaObject; example?: unknown; examples?: Record<string, unknown> }>
+): [string | undefined, { schema: OpenAPIV3.SchemaObject; example?: unknown; examples?: Record<string, unknown> } | undefined] {
+  const entries = Object.entries(content)
+  if (entries.length === 0) return [undefined, undefined]
+
+  const preferred = [
+    'application/json',
+    'application/x-www-form-urlencoded',
+    'multipart/form-data',
+    'application/octet-stream',
+  ]
+
+  for (const mediaType of preferred) {
+    const match = entries.find(([name]) => name === mediaType)
+    if (match) return match
+  }
+
+  const jsonLike = entries.find(([name]) => name.endsWith('+json'))
+  return jsonLike ?? entries[0]
 }
 
 function buildParamDescription(param: ParsedParameter): string {
@@ -133,6 +166,9 @@ function convertToZod(schema: OpenAPIV3.SchemaObject): z.ZodTypeAny {
 function convertBaseType(schema: OpenAPIV3.SchemaObject): z.ZodTypeAny {
   switch (schema.type) {
     case 'string':
+      if (schema.format === 'binary') {
+        return z.union([applyStringConstraints(z.string(), schema), binaryUploadSchema])
+      }
       return applyStringConstraints(z.string(), schema)
     case 'number':
     case 'integer':
