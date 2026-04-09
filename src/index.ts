@@ -9,3 +9,7 @@ export type {
 } from './auth/types.js'
 export type { ParsedSpec, ParsedOperation, ParsedServer, ParsedServerVariable, ParsedTag, ExternalDocs } from './parser/types.js'
 export type { FetchWithRetryOptions, RetryPolicy } from './utils/fetch.js'
+
+export { createDocsMcp } from './docs/server.js'
+export type { DocsMcpOptions, DocsMcp, DocsIndex, DocFile, SearchResult, DocsStats } from './docs/types.js'
+export { buildIndex, search, computeStats } from './docs/indexer.js'

@@ -1,9 +1,14 @@
 import { createOpenApiMcp } from './server.js'
+import { createDocsMcp } from './docs/server.js'
 
 interface CliArgs {
   source?: string
   baseUrl?: string
   serverIndex?: number
+  docs?: string
+  docsPath?: string
+  docsBranch?: string
+  name?: string
 }
 
 function parseArgs(argv: string[]): CliArgs {
@@ -18,6 +23,18 @@ function parseArgs(argv: string[]): CliArgs {
       i++
     } else if ((arg === '-b' || arg === '--base-url') && next) {
       args.baseUrl = next
+      i++
+    } else if (arg === '--docs' && next) {
+      args.docs = next
+      i++
+    } else if (arg === '--path' && next) {
+      args.docsPath = next
+      i++
+    } else if (arg === '--branch' && next) {
+      args.docsBranch = next
+      i++
+    } else if (arg === '--name' && next) {
+      args.name = next
       i++
     } else if ((arg === '--server-index') && next) {
       const parsed = parseInt(next, 10)
@@ -40,15 +57,23 @@ function parseArgs(argv: string[]): CliArgs {
 
 function printHelp(): void {
   console.log(`
-dynamic-openapi-mcp - Transform OpenAPI specs into MCP servers
+dynamic-openapi-mcp - Transform OpenAPI specs or markdown docs into MCP servers
 
 Usage:
   dynamic-openapi-mcp [options] [source]
 
-Options:
+OpenAPI Mode:
   -s, --source <url|file>   OpenAPI spec URL or file path
   -b, --base-url <url>      Override the base URL from the spec
   --server-index <n>         Use the Nth server from the spec (0-based, default: 0)
+
+Docs Mode:
+  --docs <dir|url>           Serve markdown files as MCP tools
+  --path <subpath>           Subpath within git repo (used with --docs)
+  --branch <branch>          Git branch to clone (used with --docs)
+  --name <name>              Custom server name
+
+General:
   -h, --help                Show this help message
 
 Environment Variables:
@@ -59,36 +84,59 @@ Environment Variables:
   OPENAPI_API_KEY           API key for authentication
 
 Examples:
+  # OpenAPI mode
   dynamic-openapi-mcp -s https://petstore3.swagger.io/api/v3/openapi.json
   dynamic-openapi-mcp ./spec.yaml
-  dynamic-openapi-mcp --server-index 1 ./spec.yaml
-  OPENAPI_SOURCE=./spec.yaml OPENAPI_AUTH_TOKEN=sk-123 dynamic-openapi-mcp
+
+  # Docs mode
+  dynamic-openapi-mcp --docs ./docs
+  dynamic-openapi-mcp --docs https://github.com/org/repo
+  dynamic-openapi-mcp --docs https://github.com/org/repo --path docs/ --branch main
+  dynamic-openapi-mcp --docs ./docs --name my-api-docs
 `)
 }
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv)
 
-  const source = args.source ?? process.env['OPENAPI_SOURCE'] ?? process.env['OPENAPI_SOURCE_FILE']
-
-  if (!source) {
-    console.error('Error: No OpenAPI source specified.')
-    console.error('Use -s <url|file> or set OPENAPI_SOURCE environment variable.')
-    console.error('Run dynamic-openapi-mcp --help for usage information.')
-    process.exit(1)
-  }
-
-  const baseUrl = args.baseUrl ?? process.env['OPENAPI_BASE_URL']
-
-  let serverIndex = args.serverIndex
-  if (serverIndex === undefined && process.env['OPENAPI_SERVER_INDEX']) {
-    const parsed = parseInt(process.env['OPENAPI_SERVER_INDEX'], 10)
-    if (!isNaN(parsed) && parsed >= 0) {
-      serverIndex = parsed
-    }
-  }
-
   try {
+    // Docs mode
+    if (args.docs) {
+      const mcp = await createDocsMcp({
+        source: args.docs,
+        name: args.name,
+        path: args.docsPath,
+        branch: args.docsBranch,
+      })
+
+      process.stderr.write(
+        `dynamic-openapi-mcp: docs mode — indexed ${mcp.index.files.length} files from "${mcp.index.name}"\n`
+      )
+
+      await mcp.serve()
+      return
+    }
+
+    // OpenAPI mode
+    const source = args.source ?? process.env['OPENAPI_SOURCE'] ?? process.env['OPENAPI_SOURCE_FILE']
+
+    if (!source) {
+      console.error('Error: No OpenAPI source or docs directory specified.')
+      console.error('Use -s <url|file> for OpenAPI, --docs <dir|url> for docs mode, or set OPENAPI_SOURCE.')
+      console.error('Run dynamic-openapi-mcp --help for usage information.')
+      process.exit(1)
+    }
+
+    const baseUrl = args.baseUrl ?? process.env['OPENAPI_BASE_URL']
+
+    let serverIndex = args.serverIndex
+    if (serverIndex === undefined && process.env['OPENAPI_SERVER_INDEX']) {
+      const parsed = parseInt(process.env['OPENAPI_SERVER_INDEX'], 10)
+      if (!isNaN(parsed) && parsed >= 0) {
+        serverIndex = parsed
+      }
+    }
+
     const mcp = await createOpenApiMcp({
       source,
       baseUrl,
