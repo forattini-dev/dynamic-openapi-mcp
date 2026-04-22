@@ -1,8 +1,9 @@
+import { pathToFileURL } from 'node:url'
 import { createOpenApiMcp } from './server.js'
 import { createDocsMcp } from './docs/server.js'
 import type { OperationFilters } from './parser/filter.js'
 
-interface CliArgs {
+export interface CliArgs {
   source?: string
   baseUrl?: string
   serverIndex?: number
@@ -16,7 +17,7 @@ interface CliArgs {
   excludeOperations: string[]
 }
 
-function parseArgs(argv: string[]): CliArgs {
+export function parseArgs(argv: string[]): CliArgs {
   const args: CliArgs = {
     includeTags: [],
     excludeTags: [],
@@ -84,7 +85,7 @@ function pushCsv(target: string[], value: string): void {
   }
 }
 
-function buildFilters(args: CliArgs): OperationFilters | undefined {
+export function buildFilters(args: CliArgs): OperationFilters | undefined {
   const filters: OperationFilters = {}
   if (args.includeTags.length > 0 || args.excludeTags.length > 0) {
     filters.tags = {}
@@ -213,4 +214,12 @@ async function main(): Promise<void> {
   }
 }
 
-main()
+const invokedDirectly =
+  typeof process !== 'undefined' &&
+  Array.isArray(process.argv) &&
+  process.argv[1] !== undefined &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+
+if (invokedDirectly) {
+  main()
+}
