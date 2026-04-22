@@ -16,7 +16,7 @@ Every endpoint becomes a tool. Every schema becomes a resource.
 [![Node.js](https://img.shields.io/badge/Node.js-20+-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![License](https://img.shields.io/npm/l/dynamic-openapi-mcp.svg?style=flat-square&color=007AFF)](https://github.com/forattini-dev/dynamic-openapi-mcp/blob/main/LICENSE)
 
-[Quick Start](#quick-start) · [Agent Setup](#setup-with-ai-agents) · [Auth](#authentication) · [Programmatic API](#programmatic-usage) · [CLI](#cli-reference)
+[Quick Start](#quick-start) · [The family](#the-family) · [Agent Setup](#setup-with-ai-agents) · [Auth](#authentication) · [Programmatic API](#programmatic-usage) · [CLI](#cli-reference)
 
 </div>
 
@@ -44,6 +44,7 @@ Now ask Claude: *"list all available pets"* — it will call `listPets` and retu
 
 - [Quick Start](#quick-start)
 - [What's Inside](#whats-inside)
+- [The family](#the-family)
 - [Setup with AI Agents](#setup-with-ai-agents)
   - [Claude Code](#claude-code)
   - [Cursor](#cursor)
@@ -84,6 +85,18 @@ Now ask Claude: *"list all available pets"* — it will call `listPets` and retu
 | **Sources** | URL, local file (JSON/YAML), inline string, or JavaScript object |
 
 The flow is simple: AI calls a tool → `dynamic-openapi-mcp` makes the real HTTP request → response comes back as MCP content.
+
+## The family
+
+Three complementary projects, one spec, three output surfaces — pick the one that fits the use case:
+
+| Sibling | Output | Runs when | Best when |
+|:--------|:-------|:----------|:----------|
+| [`dynamic-openapi-mcp`](#) | **Live MCP server (stdio)** | Every tool call spins the server | You want real-time introspection, auto-refreshed OAuth tokens, typed tool I/O |
+| [`dynamic-openapi-cli`](https://github.com/forattini-dev/dynamic-openapi-cli) | Bash CLI (optionally bundled) | Humans and scripts invoke it | You want a commit-friendly shim humans and CI can run |
+| [`dynamic-openapi-skill`](https://github.com/forattini-dev/dynamic-openapi-skill) | Static `SKILL.md` | Claude loads it on demand | You want zero runtime, diff-friendly docs, and model-driven calls via `curl` / `fetch` |
+
+> All three share the same parser and auth layer. Switching between them is a matter of pointing them at the same spec.
 
 ## Setup with AI Agents
 
