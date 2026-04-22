@@ -6,6 +6,7 @@ import { resolveAuth } from './auth/resolver.js'
 import { loadSpec } from './parser/loader.js'
 import { resolveSpec } from './parser/resolver.js'
 import type { ParsedSpec } from './parser/types.js'
+import { filterOperations, type OperationFilters } from './parser/filter.js'
 import { resolveBaseUrl, type HttpClientConfig } from './http/client.js'
 import type { FetchWithRetryOptions } from './utils/fetch.js'
 import { registerTools } from './mapper/tools.js'
@@ -21,6 +22,8 @@ export interface OpenApiMcpOptions {
   auth?: AuthConfig
   headers?: Record<string, string>
   fetchOptions?: FetchWithRetryOptions
+  /** Filter which operations become MCP tools. `x-hidden: true` on the operation is always honored. */
+  filters?: OperationFilters
 }
 
 export interface OpenApiMcp {
@@ -32,6 +35,7 @@ export interface OpenApiMcp {
 export async function createOpenApiMcp(options: OpenApiMcpOptions): Promise<OpenApiMcp> {
   const doc = await loadSpec(options.source)
   const spec = await resolveSpec(doc)
+  spec.operations = filterOperations(spec.operations, options.filters)
 
   const serverName = options.name ?? spec.title ?? 'dynamic-openapi-mcp'
   const serverVersion = options.version ?? spec.version ?? '1.0.0'

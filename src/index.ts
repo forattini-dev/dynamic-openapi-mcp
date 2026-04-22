@@ -8,6 +8,8 @@ export type {
   TokenExchangeApplyConfig,
 } from './auth/types.js'
 export type { ParsedSpec, ParsedOperation, ParsedServer, ParsedServerVariable, ParsedTag, ExternalDocs } from './parser/types.js'
+export { filterOperations } from './parser/filter.js'
+export type { OperationFilter, OperationFilters } from './parser/filter.js'
 export type { FetchWithRetryOptions, RetryPolicy } from './utils/fetch.js'
 
 export { createDocsMcp } from './docs/server.js'

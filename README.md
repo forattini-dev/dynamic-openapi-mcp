@@ -16,7 +16,7 @@ Every endpoint becomes a tool. Every schema becomes a resource.
 [![Node.js](https://img.shields.io/badge/Node.js-20+-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org/)
 [![License](https://img.shields.io/npm/l/dynamic-openapi-mcp.svg?style=flat-square&color=007AFF)](https://github.com/forattini-dev/dynamic-openapi-mcp/blob/main/LICENSE)
 
-[Quick Start](#quick-start) · [The family](#the-family) · [Agent Setup](#setup-with-ai-agents) · [Auth](#authentication) · [Programmatic API](#programmatic-usage) · [CLI](#cli-reference)
+[Quick Start](#quick-start) · [The family](#the-family) · [Agent Setup](#setup-with-ai-agents) · [Auth](#authentication) · [Filtering](#filtering-operations) · [Programmatic API](#programmatic-usage) · [CLI](#cli-reference)
 
 </div>
 
@@ -59,6 +59,7 @@ Now ask Claude: *"list all available pets"* — it will call `listPets` and retu
   - [Temporary Tokens and Refresh](#temporary-tokens-and-refresh)
   - [How Auth Is Usually Modeled in OpenAPI](#how-auth-is-usually-modeled-in-openapi)
   - [Troubleshooting Auth](#troubleshooting-auth)
+- [Filtering operations](#filtering-operations)
 - [Programmatic Usage](#programmatic-usage)
   - [Custom Base URL](#custom-base-url)
   - [Inline Spec](#from-an-inline-spec)
@@ -585,9 +586,14 @@ Notes:
 dynamic-openapi-mcp [options] [source]
 
 Options:
-  -s, --source <url|file>   OpenAPI spec URL or file path
-  -b, --base-url <url>      Override the base URL from the spec
-  -h, --help                Show help
+  -s, --source <url|file>        OpenAPI spec URL or file path
+  -b, --base-url <url>           Override the base URL from the spec
+      --server-index <n>         Select Nth server entry (default: 0)
+      --include-tag <name>       Only expose operations with this tag (repeatable, comma-separated)
+      --exclude-tag <name>       Hide operations with this tag (repeatable, comma-separated)
+      --include-operation <id>   Only expose these operationIds (repeatable, comma-separated)
+      --exclude-operation <id>   Hide these operationIds (repeatable, comma-separated)
+  -h, --help                     Show help
 ```
 
 | Environment Variable | Description |
@@ -596,6 +602,54 @@ Options:
 | `OPENAPI_BASE_URL` | Override base URL |
 | `OPENAPI_AUTH_TOKEN` | Bearer token for authentication |
 | `OPENAPI_API_KEY` | API key for authentication |
+
+## Filtering operations
+
+Not every endpoint needs to reach the AI. Two ways to cut the surface:
+
+### Flags (and programmatic `filters`)
+
+```bash
+# only expose the `pets` and `store` tags
+dynamic-openapi-mcp -s ./spec.yaml --include-tag pets --include-tag store
+
+# hide admin endpoints and one noisy op
+dynamic-openapi-mcp -s ./spec.yaml --exclude-tag admin --exclude-operation debugDump
+
+# allowlist specific operations — tags are ignored for these
+dynamic-openapi-mcp -s ./spec.yaml --include-operation listPets,getPetById
+
+# mix-and-match: everything under `pets`, minus one write op
+dynamic-openapi-mcp -s ./spec.yaml --include-tag pets --exclude-operation deletePet
+```
+
+Programmatic equivalent:
+
+```typescript
+const mcp = await createOpenApiMcp({
+  source: './spec.yaml',
+  filters: {
+    tags: { include: ['pets'], exclude: ['admin'] },
+    operations: { include: ['healthCheck'], exclude: ['debugDump'] },
+  },
+})
+```
+
+**Precedence** (first match wins): `x-hidden` → `operations.exclude` → `operations.include` → `tags.exclude` → includes as allowlist. `operations.include` escapes a matching `tags.exclude`, but `operations.exclude` wins over everything except `x-hidden`.
+
+### `x-hidden` vendor extension
+
+Let the spec author hide an endpoint from every consumer of this tool — no flags needed:
+
+```yaml
+paths:
+  /admin/reset:
+    post:
+      operationId: adminReset
+      x-hidden: true       # always removed, regardless of filter flags
+```
+
+Good for internal-only endpoints that ship in the public spec but shouldn't be called from AI agents / bundled CLIs / skills.
 
 ## How the Mapping Works
 
