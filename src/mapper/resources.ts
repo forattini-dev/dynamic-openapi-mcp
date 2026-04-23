@@ -1,5 +1,5 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import type { ParsedSpec } from '../parser/types.js'
+import type { ParsedSpec } from 'dynamic-openapi-tools/parser'
 
 export function registerResources(server: McpServer, spec: ParsedSpec): void {
   server.resource(

@@ -1,8 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { resolve } from 'node:path'
-import { loadSpec } from '../src/parser/loader.js'
-import { resolveSpec } from '../src/parser/resolver.js'
+import { loadSpec, resolveSpec } from 'dynamic-openapi-tools/parser'
 import { registerTools } from '../src/mapper/tools.js'
 import type { HttpClientConfig } from '../src/http/client.js'
 

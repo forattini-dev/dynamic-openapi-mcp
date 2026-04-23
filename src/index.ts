@@ -6,11 +6,19 @@ export type {
   TokenExchangeRequestConfig,
   TokenExchangeResponseConfig,
   TokenExchangeApplyConfig,
-} from './auth/types.js'
-export type { ParsedSpec, ParsedOperation, ParsedServer, ParsedServerVariable, ParsedTag, ExternalDocs } from './parser/types.js'
-export { filterOperations } from './parser/filter.js'
-export type { OperationFilter, OperationFilters } from './parser/filter.js'
-export type { FetchWithRetryOptions, RetryPolicy } from './utils/fetch.js'
+} from 'dynamic-openapi-tools/auth'
+export type {
+  ParsedSpec,
+  ParsedOperation,
+  ParsedServer,
+  ParsedServerVariable,
+  ParsedTag,
+  ExternalDocs,
+  OperationFilter,
+  OperationFilters,
+} from 'dynamic-openapi-tools/parser'
+export { filterOperations } from 'dynamic-openapi-tools/parser'
+export type { FetchWithRetryOptions, RetryPolicy } from 'dynamic-openapi-tools/utils'
 
 export { createDocsMcp } from './docs/server.js'
 export type { DocsMcpOptions, DocsMcp, DocsIndex, DocFile, SearchResult, DocsStats } from './docs/types.js'

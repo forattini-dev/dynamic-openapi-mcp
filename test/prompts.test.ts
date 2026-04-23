@@ -1,10 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { resolve } from 'node:path'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { loadSpec } from '../src/parser/loader.js'
-import { resolveSpec } from '../src/parser/resolver.js'
+import { loadSpec, resolveSpec } from 'dynamic-openapi-tools/parser'
 import { registerPrompts } from '../src/mapper/prompts.js'
-import type { ParsedSpec } from '../src/parser/types.js'
+import type { ParsedSpec } from 'dynamic-openapi-tools/parser'
 import type { HttpClientConfig } from '../src/http/client.js'
 
 const FIXTURE = resolve(import.meta.dirname, 'fixtures/petstore.yaml')

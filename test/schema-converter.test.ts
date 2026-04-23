@@ -2,8 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { resolve } from 'node:path'
 import { z } from 'zod'
 import { zodToJsonSchema } from 'zod-to-json-schema'
-import { loadSpec } from '../src/parser/loader.js'
-import { resolveSpec } from '../src/parser/resolver.js'
+import { loadSpec, resolveSpec } from 'dynamic-openapi-tools/parser'
 import { buildToolInputSchema } from '../src/mapper/schema-converter.js'
 
 const FIXTURE = resolve(import.meta.dirname, 'fixtures/petstore.yaml')

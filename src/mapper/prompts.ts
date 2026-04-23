@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
-import type { ParsedSpec, ParsedOperation, ParsedResponse, ParsedTag } from '../parser/types.js'
+import type { ParsedSpec, ParsedOperation, ParsedResponse, ParsedTag } from 'dynamic-openapi-tools/parser'
 import type { HttpClientConfig } from '../http/client.js'
 import { resolveServerUrl } from '../http/client.js'
 

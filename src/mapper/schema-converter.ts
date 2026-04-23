@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import type { OpenAPIV3 } from 'openapi-types'
-import type { ParsedOperation, ParsedParameter } from '../parser/types.js'
+import type { ParsedOperation, ParsedParameter } from 'dynamic-openapi-tools/parser'
 
 const binaryUploadSchema = z.object({
   dataBase64: z.string().describe('Base64-encoded file content'),

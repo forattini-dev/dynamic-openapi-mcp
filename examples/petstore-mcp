@@ -77,7 +77,7 @@ if [[ "${1:-}" == "install" ]]; then
       -h|--help)
         printf 'Usage: %s install [--dir <path>] [--copy] [--force]\n' "$MCP_NAME"
         printf '\n'
-        printf 'Installs this MCP binary into a directory on your PATH.\n'
+        printf 'Installs this binary into a directory on your PATH.\n'
         printf '\n'
         printf 'Options:\n'
         printf '  --dir <path>   Target directory (default: \$XDG_BIN_HOME or \$HOME/.local/bin)\n'
@@ -319,7 +319,7 @@ done
 if [[ -n "$SPEC_OVERRIDE" ]]; then
   SPEC_FILE="$SPEC_OVERRIDE"
 else
-  SPEC_FILE="$(mktemp -t "${MCP_NAME}.XXXXXX.json")"
+  SPEC_FILE="$(mktemp -t "$MCP_NAME.XXXXXX.json")"
   trap 'rm -f "$SPEC_FILE"' EXIT
   printf '%s' "$SPEC_B64" | base64 -d > "$SPEC_FILE"
 fi

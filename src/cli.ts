@@ -5,7 +5,7 @@ import type { PrimitiveValue } from 'cli-args-parser'
 import { createOpenApiMcp } from './server.js'
 import { createDocsMcp } from './docs/server.js'
 import { runBundle } from './cli/bundle.js'
-import type { OperationFilters } from './parser/filter.js'
+import type { OperationFilters } from 'dynamic-openapi-tools/parser'
 
 export interface CliArgs {
   source?: string

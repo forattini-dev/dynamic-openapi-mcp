@@ -1,10 +1,10 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
-import type { ParsedSpec } from '../parser/types.js'
+import type { ParsedSpec } from 'dynamic-openapi-tools/parser'
+import { sanitizeToolName, truncateDescription } from 'dynamic-openapi-tools/utils'
 import type { HttpClientConfig } from '../http/client.js'
 import { executeOperation, resolveServerUrl } from '../http/client.js'
 import { buildToolInputSchema } from './schema-converter.js'
-import { sanitizeToolName, truncateDescription } from '../utils/naming.js'
 
 export function registerTools(server: McpServer, spec: ParsedSpec, httpConfig: HttpClientConfig): void {
   for (const operation of spec.operations) {
@@ -97,7 +97,7 @@ function registerSetEnvironmentTool(server: McpServer, spec: ParsedSpec, httpCon
   )
 }
 
-function tryResolveUrl(server: import('../parser/types.js').ParsedServer): string | null {
+function tryResolveUrl(server: import('dynamic-openapi-tools/parser').ParsedServer): string | null {
   try {
     return resolveServerUrl(server)
   } catch {

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { executeOperation, resolveBaseUrl, resolveServerUrl, type HttpClientConfig } from '../src/http/client.js'
-import type { ParsedOperation, ParsedSpec } from '../src/parser/types.js'
+import type { ParsedOperation, ParsedSpec } from 'dynamic-openapi-tools/parser'
 
 // Mock global fetch
 const mockFetch = vi.fn()
