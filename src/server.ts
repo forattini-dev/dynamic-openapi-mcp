@@ -1,7 +1,11 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import type { AuthConfig } from 'dynamic-openapi-tools/auth'
-import { resolveAuth } from 'dynamic-openapi-tools/auth'
+import type { AuthConfig, ResolvedAuth } from 'dynamic-openapi-tools/auth'
+import {
+  resolveAuth,
+  createOAuth2AuthCodeAuth,
+  detectOAuth2AuthCode,
+} from 'dynamic-openapi-tools/auth'
 import { loadSpec, resolveSpec, filterOperations } from 'dynamic-openapi-tools/parser'
 import type { OpenAPIV3 } from 'dynamic-openapi-tools/parser'
 import type { ParsedSpec, OperationFilters } from 'dynamic-openapi-tools/parser'
@@ -43,7 +47,7 @@ export async function createOpenApiMcp(options: OpenApiMcpOptions): Promise<Open
     version: serverVersion,
   })
 
-  const auth = resolveAuth(options.auth, spec.securitySchemes)
+  const auth = resolveAuthWithOAuth2(spec, options.auth, serverName)
   const baseUrl = resolveBaseUrl(spec, options.baseUrl, options.serverIndex)
 
   const httpConfig: HttpClientConfig = {
@@ -65,4 +69,23 @@ export async function createOpenApiMcp(options: OpenApiMcpOptions): Promise<Open
       await server.connect(transport)
     },
   }
+}
+
+/**
+ * Use the tools' resolveAuth first (bearer, basic, apiKey, client-credentials);
+ * if nothing matched AND the spec declares an OAuth2 authorization-code flow
+ * with OPENAPI_OAUTH2_CLIENT_ID in the env, fall back to the interactive flow.
+ * The serverName scopes the encrypted token cache so multiple MCPs on the
+ * same host do not collide.
+ */
+function resolveAuthWithOAuth2(
+  spec: ParsedSpec,
+  authConfig: AuthConfig | undefined,
+  serverName: string
+): ResolvedAuth | null {
+  const resolved = resolveAuth(authConfig, spec.securitySchemes)
+  if (resolved) return resolved
+  const detected = detectOAuth2AuthCode(spec.securitySchemes, { appName: serverName })
+  if (detected) return createOAuth2AuthCodeAuth(detected.config)
+  return null
 }
