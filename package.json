@@ -46,5 +46,16 @@
     "tsup": "^8.4.0",
     "typescript": "^5.7.3",
     "vitest": "^3.0.5"
+  },
+  "pnpm": {
+    "overrides": {
+      "hono": "^4.12.14",
+      "@hono/node-server": "^1.19.13",
+      "qs": "^6.14.2",
+      "express-rate-limit": "^8.2.2",
+      "path-to-regexp": "^8.4.0",
+      "ajv": "^8.18.0",
+      "yaml": "^2.8.3"
+    }
   }
 }
