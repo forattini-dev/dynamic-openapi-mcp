@@ -1,6 +1,10 @@
-import { pathToFileURL } from 'node:url'
+import { realpathSync } from 'node:fs'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { createParser } from 'cli-args-parser'
+import type { PrimitiveValue } from 'cli-args-parser'
 import { createOpenApiMcp } from './server.js'
 import { createDocsMcp } from './docs/server.js'
+import { runBundle } from './cli/bundle.js'
 import type { OperationFilters } from './parser/filter.js'
 
 export interface CliArgs {
@@ -17,72 +21,83 @@ export interface CliArgs {
   excludeOperations: string[]
 }
 
-export function parseArgs(argv: string[]): CliArgs {
-  const args: CliArgs = {
-    includeTags: [],
-    excludeTags: [],
-    includeOperations: [],
-    excludeOperations: [],
-  }
-
-  for (let i = 2; i < argv.length; i++) {
-    const arg = argv[i]
-    const next = argv[i + 1]
-
-    if ((arg === '-s' || arg === '--source') && next) {
-      args.source = next
-      i++
-    } else if ((arg === '-b' || arg === '--base-url') && next) {
-      args.baseUrl = next
-      i++
-    } else if (arg === '--docs' && next) {
-      args.docs = next
-      i++
-    } else if (arg === '--path' && next) {
-      args.docsPath = next
-      i++
-    } else if (arg === '--branch' && next) {
-      args.docsBranch = next
-      i++
-    } else if (arg === '--name' && next) {
-      args.name = next
-      i++
-    } else if (arg === '--include-tag' && next) {
-      pushCsv(args.includeTags, next)
-      i++
-    } else if (arg === '--exclude-tag' && next) {
-      pushCsv(args.excludeTags, next)
-      i++
-    } else if (arg === '--include-operation' && next) {
-      pushCsv(args.includeOperations, next)
-      i++
-    } else if (arg === '--exclude-operation' && next) {
-      pushCsv(args.excludeOperations, next)
-      i++
-    } else if ((arg === '--server-index') && next) {
-      const parsed = parseInt(next, 10)
-      if (isNaN(parsed) || parsed < 0) {
-        console.error(`Error: --server-index must be a non-negative integer, got "${next}"`)
-        process.exit(1)
-      }
-      args.serverIndex = parsed
-      i++
-    } else if (arg === '-h' || arg === '--help') {
-      printHelp()
-      process.exit(0)
-    } else if (!arg.startsWith('-') && !args.source) {
-      args.source = arg
-    }
-  }
-
-  return args
+function buildCliParser() {
+  return createParser({
+    options: {
+      source: { short: 's', type: 'string' },
+      'base-url': { short: 'b', type: 'string' },
+      'server-index': { type: 'string' },
+      docs: { type: 'string' },
+      path: { type: 'string' },
+      branch: { type: 'string' },
+      name: { type: 'string' },
+      'include-tag': { type: 'array' },
+      'exclude-tag': { type: 'array' },
+      'include-operation': { type: 'array' },
+      'exclude-operation': { type: 'array' },
+      help: { short: 'h', type: 'boolean' },
+    },
+    positional: [{ name: 'source' }],
+  })
 }
 
-function pushCsv(target: string[], value: string): void {
-  for (const piece of value.split(',')) {
-    const trimmed = piece.trim()
-    if (trimmed) target.push(trimmed)
+export function parseArgs(argv: string[]): CliArgs {
+  const parser = buildCliParser()
+  const result = parser.parse(argv.slice(2))
+
+  if (result.options['help'] === true) {
+    printHelp()
+    process.exit(0)
   }
+
+  const rawServerIndex = pickString(result.options['server-index'])
+  let serverIndex: number | undefined
+  if (rawServerIndex !== undefined) {
+    const parsed = parseInt(rawServerIndex, 10)
+    if (isNaN(parsed) || parsed < 0) {
+      console.error(`Error: --server-index must be a non-negative integer, got "${rawServerIndex}"`)
+      process.exit(1)
+    }
+    serverIndex = parsed
+  }
+
+  const source =
+    pickString(result.options['source']) ?? pickString(result.positional['source'])
+
+  return {
+    source,
+    baseUrl: pickString(result.options['base-url']),
+    serverIndex,
+    docs: pickString(result.options['docs']),
+    docsPath: pickString(result.options['path']),
+    docsBranch: pickString(result.options['branch']),
+    name: pickString(result.options['name']),
+    includeTags: csvArray(result.options['include-tag']),
+    excludeTags: csvArray(result.options['exclude-tag']),
+    includeOperations: csvArray(result.options['include-operation']),
+    excludeOperations: csvArray(result.options['exclude-operation']),
+  }
+}
+
+function pickString(value: PrimitiveValue | PrimitiveValue[] | undefined): string | undefined {
+  if (value === undefined || value === null) return undefined
+  if (Array.isArray(value)) return value.length > 0 ? String(value[0]) : undefined
+  if (typeof value === 'boolean') return undefined
+  const str = String(value)
+  return str.length > 0 ? str : undefined
+}
+
+function csvArray(value: PrimitiveValue | PrimitiveValue[] | undefined): string[] {
+  if (value === undefined || value === null) return []
+  const values = Array.isArray(value) ? value : [value]
+  const out: string[] = []
+  for (const v of values) {
+    for (const piece of String(v).split(',')) {
+      const trimmed = piece.trim()
+      if (trimmed) out.push(trimmed)
+    }
+  }
+  return out
 }
 
 export function buildFilters(args: CliArgs): OperationFilters | undefined {
@@ -106,6 +121,11 @@ dynamic-openapi-mcp - Transform OpenAPI specs or markdown docs into MCP servers
 
 Usage:
   dynamic-openapi-mcp [options] [source]
+  dynamic-openapi-mcp bundle -s <url|file> --name <mcp-name> --out <path>
+
+Subcommands:
+  bundle                    Package an OpenAPI spec into a standalone MCP binary
+                            (run "dynamic-openapi-mcp bundle --help" for details)
 
 OpenAPI Mode:
   -s, --source <url|file>   OpenAPI spec URL or file path
@@ -147,6 +167,12 @@ Examples:
 }
 
 async function main(): Promise<void> {
+  const rawArgs = process.argv.slice(2)
+  if (rawArgs[0] === 'bundle') {
+    await runBundle(rawArgs.slice(1))
+    return
+  }
+
   const args = parseArgs(process.argv)
 
   try {
@@ -214,12 +240,19 @@ async function main(): Promise<void> {
   }
 }
 
-const invokedDirectly =
-  typeof process !== 'undefined' &&
-  Array.isArray(process.argv) &&
-  process.argv[1] !== undefined &&
-  import.meta.url === pathToFileURL(process.argv[1]).href
+function isInvokedDirectly(): boolean {
+  if (typeof process === 'undefined' || !Array.isArray(process.argv)) return false
+  const argv1 = process.argv[1]
+  if (!argv1) return false
+  try {
+    const argvReal = realpathSync(argv1)
+    const metaReal = realpathSync(fileURLToPath(import.meta.url))
+    return pathToFileURL(argvReal).href === pathToFileURL(metaReal).href
+  } catch {
+    return false
+  }
+}
 
-if (invokedDirectly) {
+if (isInvokedDirectly()) {
   main()
 }

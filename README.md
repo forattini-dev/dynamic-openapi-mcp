@@ -66,6 +66,7 @@ Now ask Claude: *"list all available pets"* — it will call `listPets` and retu
   - [Inspecting the Spec](#inspecting-the-parsed-spec)
   - [Retry Behavior](#retry-behavior)
 - [CLI Reference](#cli-reference)
+- [Offline bundles](#offline-bundles)
 - [How the Mapping Works](#how-the-mapping-works)
   - [Operations → Tools](#operations--tools)
   - [Schemas → Resources](#schemas--resources)
@@ -602,6 +603,42 @@ Options:
 | `OPENAPI_BASE_URL` | Override base URL |
 | `OPENAPI_AUTH_TOKEN` | Bearer token for authentication |
 | `OPENAPI_API_KEY` | API key for authentication |
+
+## Offline bundles
+
+Package any OpenAPI spec into a single standalone bash binary that behaves as an MCP server — no network call at startup, deterministic md5, portable across machines.
+
+```bash
+dynamic-openapi-mcp bundle \
+  -s https://petstore3.swagger.io/api/v3/openapi.json \
+  --name petstore-mcp \
+  --out ./bin/petstore-mcp
+```
+
+The generated file embeds the dereferenced spec as base64 JSON and `exec`s `dynamic-openapi-mcp` with `--source <tmpfile>` at runtime. Any additional arguments are forwarded to the runner, so it drops straight into `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "petstore": {
+      "command": "/absolute/path/to/bin/petstore-mcp"
+    }
+  }
+}
+```
+
+Bundled binaries also expose:
+
+| Subcommand | Purpose |
+|:-----------|:--------|
+| `--show-spec` | Decode and print the embedded spec |
+| `--spec-md5` | Print the md5 of the embedded spec |
+| `--spec <url\|file>` | Override the embedded spec at runtime |
+| `update` | Re-fetch the original spec and rewrite the binary in-place |
+| `install` | Symlink (or `--copy`) the binary into `$XDG_BIN_HOME` or `~/.local/bin` |
+| `uninstall` | Remove a previous `install` |
+
+Run `dynamic-openapi-mcp bundle --help` for the full list of options.
 
 ## Filtering operations
 
