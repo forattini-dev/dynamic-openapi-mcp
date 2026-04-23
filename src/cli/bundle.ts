@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { createParser } from 'cli-args-parser'
+import { createParser } from 'dynamic-openapi-tools/cli'
 import { buildBundle as buildBundleFromTools } from 'dynamic-openapi-tools/bundle'
 
 export interface BundleOptions {
