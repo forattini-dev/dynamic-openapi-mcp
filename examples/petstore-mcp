@@ -4,7 +4,7 @@
 # MCP name:    petstore-mcp
 # Version:     1.0.0
 # Description: Petstore
-# Spec source: /home/ff/work/FF/dynamic-openapi-mcp/test/fixtures/petstore.yaml
+# Spec source: test/fixtures/petstore.yaml
 # Spec MD5:    3117db3edd719bff3f7e91a8797ad06b
 # Spec:        embedded as base64-encoded JSON (dereferenced OpenAPI v3)
 set -euo pipefail
@@ -12,7 +12,7 @@ set -euo pipefail
 MCP_NAME='petstore-mcp'
 MCP_VERSION='1.0.0'
 MCP_DESCRIPTION='Petstore'
-SPEC_SOURCE='/home/ff/work/FF/dynamic-openapi-mcp/test/fixtures/petstore.yaml'
+SPEC_SOURCE='test/fixtures/petstore.yaml'
 SPEC_SOURCE_KIND='file'
 SPEC_MD5='3117db3edd719bff3f7e91a8797ad06b'
 
