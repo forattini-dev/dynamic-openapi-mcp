@@ -688,6 +688,84 @@ paths:
 
 Good for internal-only endpoints that ship in the public spec but shouldn't be called from AI agents / bundled CLIs / skills.
 
+### `x-mcp-hidden` — MCP-only opt-out
+
+Sometimes you want the operation visible in the CLI or skill consumers, but **not** exposed as an MCP tool — typically risky operations where you trust a human at the terminal but not an autonomous agent:
+
+```yaml
+paths:
+  /admin/wipe:
+    delete:
+      operationId: wipeEverything
+      x-mcp-hidden: true   # invisible to MCP; still callable from the CLI
+```
+
+Distinct from `x-hidden`, which removes the operation everywhere.
+
+### `MCP_MAX_TOOLS` — tool budget
+
+Specs with hundreds of operations poison the agent context with tool listings. Cap it:
+
+```bash
+MCP_MAX_TOOLS=50 dynamic-openapi-mcp -s ./huge-spec.yaml
+```
+
+When the spec exceeds the budget, operations are ranked (non-deprecated + tagged first, then alphabetical) and the surplus is registered as a single `list_available_operations` tool the agent can call to discover what was trimmed.
+
+## Tool safety annotations
+
+Every registered tool gets MCP [ToolAnnotations](https://modelcontextprotocol.io/specification/draft/server/tools#tool-annotations) derived from the HTTP method, so hosts (Claude Desktop, Cursor) can prompt for confirmation on the right operations:
+
+| Method | `readOnlyHint` | `destructiveHint` | `idempotentHint` | `openWorldHint` |
+|:-------|:--------------:|:------------------:|:----------------:|:---------------:|
+| `GET`, `HEAD`, `OPTIONS`, `TRACE` | ✓ | ✗ | ✓ | ✓ |
+| `POST` | ✗ | ✗ | ✗ | ✓ |
+| `PUT` | ✗ | ✗ | ✓ | ✓ |
+| `PATCH` | ✗ | ✗ | ✗ | ✓ |
+| `DELETE` | ✗ | ✓ | ✓ | ✓ |
+
+Override at the spec level with vendor extensions:
+
+```yaml
+paths:
+  /search:
+    post:
+      operationId: searchThings
+      x-side-effect: read-only   # POST that only reads — read-only annotations
+  /admin/wipe:
+    get:
+      operationId: wipeEverything
+      x-destructive: true        # GET that actually destroys — destructive annotation
+```
+
+Resolution: `x-side-effect` > `x-destructive` > HTTP method default.
+
+## Tool descriptions
+
+Tool descriptions are synthesised deterministically from the operation's `summary`/`description` plus parameter signature plus response shape — much richer than `truncate(summary)`:
+
+```
+Fetch pet by id
+
+Parameters:
+  - petId(path, integer<int64>, required)
+  - status(query, enum: "available"|"pending"|"sold", optional)
+
+Returns: 200 — array<Pet> — OK
+```
+
+Curated descriptions win via `x-description-override`:
+
+```yaml
+paths:
+  /search:
+    post:
+      operationId: searchThings
+      x-description-override: |
+        Search returns up to 25 pets matching the query, ordered by relevance.
+        Call get-pet-by-id afterwards for full details.
+```
+
 ## How the Mapping Works
 
 ### Operations → Tools

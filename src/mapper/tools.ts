@@ -1,23 +1,26 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import type { ParsedSpec } from 'dynamic-openapi-tools/parser'
-import { sanitizeToolName, truncateDescription } from 'dynamic-openapi-tools/utils'
+import { sanitizeToolName } from 'dynamic-openapi-tools/utils'
 import type { HttpClientConfig } from '../http/client.js'
 import { executeOperation, resolveServerUrl } from '../http/client.js'
 import { buildToolInputSchema } from './schema-converter.js'
+import { toolAnnotationsFor } from './safety.js'
+import { buildToolDescription } from './descriptions.js'
+import { selectOperations } from './budget.js'
 
 export function registerTools(server: McpServer, spec: ParsedSpec, httpConfig: HttpClientConfig): void {
-  for (const operation of spec.operations) {
-    const toolName = sanitizeToolName(operation.operationId)
-    const rawDescription = (operation.summary ?? operation.description ?? '').trim().replace(/\s+/g, ' ')
-    const prefix = operation.deprecated ? '[DEPRECATED] ' : ''
-    const description = truncateDescription(`${prefix}${rawDescription}`) || `${operation.method} ${operation.path}`
-    const shape = buildToolInputSchema(operation)
+  const selection = selectOperations(spec.operations)
 
-    server.tool(
+  for (const operation of selection.registered) {
+    const toolName = sanitizeToolName(operation.operationId)
+    const description = buildToolDescription(operation)
+    const inputSchema = buildToolInputSchema(operation)
+    const annotations = toolAnnotationsFor(operation)
+
+    server.registerTool(
       toolName,
-      description,
-      shape,
+      { description, inputSchema, annotations },
       async (args: Record<string, unknown>) => {
         const content = await executeOperation(operation, args, httpConfig)
         return { content }
@@ -25,22 +28,74 @@ export function registerTools(server: McpServer, spec: ParsedSpec, httpConfig: H
     )
   }
 
+  if (selection.budgeted.length > 0 || selection.hidden.length > 0) {
+    registerListAvailableOperations(server, selection)
+  }
+
   if (spec.servers.length > 0) {
     registerSetEnvironmentTool(server, spec, httpConfig)
   }
 }
 
+function registerListAvailableOperations(server: McpServer, selection: ReturnType<typeof selectOperations>): void {
+  server.registerTool(
+    'list_available_operations',
+    {
+      description: 'List every spec operation, including ones not registered as MCP tools (hidden via x-mcp-hidden, or trimmed by the MCP_MAX_TOOLS budget). Use this to discover what is available beyond the registered tools.',
+      inputSchema: {},
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async () => {
+      const lines: string[] = []
+      lines.push(`Registered as MCP tools (${selection.registered.length}):`)
+      for (const op of selection.registered) {
+        lines.push(`  - ${op.operationId} (${op.method} ${op.path})`)
+      }
+
+      if (selection.budgeted.length > 0) {
+        lines.push('', `Trimmed by MCP_MAX_TOOLS budget (${selection.budgeted.length}):`)
+        for (const op of selection.budgeted) {
+          lines.push(`  - ${op.operationId} (${op.method} ${op.path})${op.deprecated ? ' [deprecated]' : ''}`)
+        }
+      }
+
+      if (selection.hidden.length > 0) {
+        lines.push('', `Hidden via x-mcp-hidden (${selection.hidden.length}):`)
+        for (const op of selection.hidden) {
+          lines.push(`  - ${op.operationId} (${op.method} ${op.path})`)
+        }
+      }
+
+      return { content: [{ type: 'text' as const, text: lines.join('\n') }] }
+    }
+  )
+}
+
 function registerSetEnvironmentTool(server: McpServer, spec: ParsedSpec, httpConfig: HttpClientConfig): void {
-  const shape = {
+  const inputSchema = {
     server_index: z.number().int().min(0).optional().describe('Index of the server to use (0-based)'),
     server_url: z.string().optional().describe('Direct URL override (takes precedence over server_index)'),
     variables: z.record(z.string()).optional().describe('Server variable overrides (e.g. {"environment": "staging"})'),
   }
 
-  server.tool(
+  server.registerTool(
     'set_environment',
-    'Switch the active API server/environment. Lists available servers when called without arguments.',
-    shape,
+    {
+      description: 'Switch the active API server/environment. Lists available servers when called without arguments.',
+      inputSchema,
+      annotations: {
+        // Server switch is local-state only — no API call fires from this tool itself.
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
     async (args: { server_index?: number; server_url?: string; variables?: Record<string, string> }) => {
       const lines: string[] = []
 
